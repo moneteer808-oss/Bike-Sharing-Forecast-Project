@@ -1,0 +1,254 @@
+---
+title: "Forecast daily bike rental demand using time series models"
+author: "Franckie Wibisono"
+date: "`r Sys.Date()`"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+# About Data Analysis Report
+
+This RMarkdown file contains the report of the data analysis done for the project on forecasting daily bike rental demand using time series models in R. It contains analysis such as data exploration, summary statistics and building the time series models. The final report was completed on `r date()`. 
+
+**Data Description:**
+
+This dataset contains the daily count of rental bike transactions between years 2011 and 2012 in Capital bikeshare system with the corresponding weather and seasonal information.
+
+**Data Source:** https://archive.ics.uci.edu/ml/datasets/bike+sharing+dataset
+
+**Relevant Paper:** 
+
+Fanaee-T, Hadi, and Gama, Joao. Event labeling combining ensemble detectors and background knowledge, Progress in Artificial Intelligence (2013): pp. 1-15, Springer Berlin Heidelberg
+
+
+
+# Task One: Load and explore the data
+
+## Load data and install packages
+
+```{r}
+## Import required packages
+# Install timetk (required for the dataset)
+# install.packages(c("timetk", "dplyr"))
+
+
+# Load the package
+library(timetk)
+library(dplyr)
+
+# Load the built-in dataset
+data("bike_sharing_daily")
+
+# Create a working copy
+bike_data <- bike_sharing_daily
+
+
+```
+
+
+
+## Describe and explore the data
+
+```{r}
+# Correlation between temp/atemp and total rentals (cnt)
+cor(bike_data$temp, bike_data$cnt)
+cor(bike_data$atemp, bike_data$cnt)
+
+# Mean & median temp by season
+bike_data %>%
+  mutate(season_label = case_when(
+    season == 1 ~ "Winter",
+    season == 2 ~ "Spring",
+    season == 3 ~ "Summer",
+    season == 4 ~ "Fall"
+  )) %>%
+  group_by(season_label) %>%
+  summarise(
+    mean_temp = mean(temp),
+    median_temp = median(temp),
+    mean_rentals = mean(cnt)
+  )
+```
+
+
+
+# Task Two: Create interactive time series plots
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+
+bike_data %>%
+  mutate(year = year(dteday)) %>%
+  ggplot(aes(x = dteday, y = cnt, color = factor(year))) +
+  geom_line() +
+  labs(
+    title = "Daily Bike Rentals (2011-2012)",
+    x = "Date",
+    y = "Total Rentals (cnt)",
+    color = "Year"
+  ) +
+  theme_minimal()
+```
+
+
+
+
+# Task Three: Smooth time series data
+
+```{r}
+# Load required packages
+library(forecast)
+library(TTR)
+
+# Step 1: Create time series object
+ts_cnt <- ts(bike_data$cnt, start = c(2011, 1), frequency = 365)
+
+# Step 2: Clean the series
+ts_clean <- tsclean(ts_cnt)
+
+# Step 3: Compute SMA(10)
+ts_sma_raw <- SMA(as.numeric(ts_clean), n = 10)
+
+# Step 4: Align SMA with original time series (remove leading NAs for plotting)
+# Create a new time series with same time index
+ts_sma <- ts(ts_sma_raw, start = start(ts_clean), frequency = frequency(ts_clean))
+
+# Step 5: Plot
+plot(ts_clean, main = "Bike Rentals: Original vs. SMA(10)", col = "black", lwd = 1)
+lines(ts_sma, col = "red", lwd = 2)
+legend("topright", legend = c("Original", "SMA(10)"), col = c("black", "red"), lwd = 2)
+
+```
+
+
+
+# Task Four: Decompose and assess the stationarity of time series data
+
+```{r}
+# Load required packages
+library(forecast)
+library(tseries)  # Needed for adf.test()
+
+# Step 1: Decompose the time series using STL
+decomp <- stl(ts_clean, s.window = "periodic")
+plot(decomp)
+
+# Step 2: Check stationarity using ADF test
+adf_result1 <- adf.test(ts_clean)
+print(adf_result1)
+
+# Step 3: Difference the series once (to remove trend)
+ts_diff <- diff(ts_clean, differences = 1)
+
+# Step 4: Re-check stationarity on differenced series
+adf_result2 <- adf.test(ts_diff)
+print(adf_result2)
+
+```
+
+
+
+# Task Five: Fit and forecast time series data using ARIMA models
+
+```{r}
+# Load required packages
+library(forecast)
+library(tseries)
+
+# Check the structure of ts_diff
+print("Length of ts_diff:")
+print(length(ts_diff))
+
+print("Number of NA values in ts_diff:")
+print(sum(is.na(ts_diff)))
+
+print("First 10 values of ts_diff:")
+print(head(ts_diff, 10))
+
+print("Is ts_diff a time series object?")
+print(is.ts(ts_diff))
+
+# Remove any remaining NA values (if any)
+ts_diff_clean <- na.omit(ts_diff)
+
+print("Length after removing NAs:")
+print(length(ts_diff_clean))
+
+# Try fitting ARIMA on the cleaned version
+if (length(ts_diff_clean) > 10) {
+  fit_auto <- auto.arima(ts_diff_clean, seasonal = FALSE, stepwise = TRUE, approximation = TRUE)
+  print("Model fitted successfully!")
+  print(summary(fit_auto))
+  
+  # Forecast
+  fc <- forecast(fit_auto, h = 25)
+  plot(fc, main = "Forecast: Next 25 Days")
+} else {
+  stop("Not enough data to fit ARIMA model.")
+}
+
+
+```
+
+
+
+# Task Six: Findings and Conclusions
+## Findings and Conclusions
+
+Throughout this project, I analyzed daily bike rental demand in Washington, DC (2011-2012) using time series modeling techniques. Here are my key findings:
+
+### 1. Data Exploration
+- There is a **strong positive correlation** between temperature and total rentals (`cor(temp, cnt) = 0.627`).
+- Rentals peak in **Summer** (mean = 5,644/day) and dip in **Winter** (mean = 2,604/day), confirming that weather heavily influences demand.
+
+### 2. Time Series Visualization
+- Interactive plots showed clear **seasonal patterns** and an **upward trend** over time.
+- Smoothing with SMA(10) revealed the underlying trend while reducing noise.
+
+### 3. Stationarity & Decomposition
+- The original series was **non-stationary** (p-value > 0.05 in ADF test).
+- After **first-order differencing**, the series became **stationary** (p-value = 0.01), making it suitable for ARIMA modeling.
+
+### 4. ARIMA Forecasting
+- An `ARIMA(1,0,1)` model was fitted to the differenced series.
+- The forecast for the next 25 days shows **stable changes around zero**, suggesting no strong upward or downward trend in daily *changes* of rentals.
+
+### Final Thoughts
+This project reinforced how real-world data (like bike rentals) can be modeled using time series methods. While the forecast is for *changes*, not absolute values, the process — from exploration to modeling — mirrors real business analytics workflows. For future work, I would explore adding external variables (e.g., holidays, events) to improve accuracy.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
