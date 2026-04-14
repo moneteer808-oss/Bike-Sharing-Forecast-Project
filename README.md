@@ -15,7 +15,6 @@ This project analyzes daily bike rental demand in Washington, DC (2011-2012) usi
 -  ├── bike-sharing-forecast.Rproj # RStudio project file
 
 ---
----
 
 ## 📖 Data Description
 
@@ -59,6 +58,14 @@ This project analyzes daily bike rental demand in Washington, DC (2011-2012) usi
 - ARIMA forecasting predicts **stable changes** in daily rentals over the next 25 days.  
 
 ---
+
+## Operational Recommendation
+
+Based on forecasted demand patterns:
+
+- Increase bike allocation during identified peak hours (e.g., morning and evening commute summer periods)
+- Reduce allocation during low-demand periods (winter) to minimize idle inventory
+- Pre-position bikes in high-demand locations ahead of peak period
 
 ## How to Reproduce
 
